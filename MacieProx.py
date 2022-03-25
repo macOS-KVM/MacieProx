@@ -1,4 +1,7 @@
-from ast import Add
+# TODO:
+# - Add Size to vm config when adding macOS recovery to it
+# - Support more, older macOS versions
+
 import os, shutil
 from pathlib import Path
 
@@ -51,6 +54,7 @@ elif SelectedNumber in ['4']:
     os.system(macrecoveryPath + " -b Mac-7BA5B2DFE22DDD8C -m 00000000000KXPG00 download -n macOS-Mojave")
     macOSVersion = "Mojave"
 
+DebugPrint("Converting macOS-%s.dmg to %s-recovery.img" % (macOSVersion, macOSVersion))
 os.system("qemu-img convert macOS-%s.dmg -O raw %s-recovery.img" % (macOSVersion, macOSVersion))
 DebugPrint("\nConverted macOS-%s.dmg to %s-recovery.img" % (macOSVersion, macOSVersion))
 
@@ -73,9 +77,36 @@ os.system("mv " + macOSVersion + "-recovery.img " + ProxISOPath)
 DebugPrint("\nMoved macOS %s recovery to Proxmox ISO folder" % (macOSVersion))
 
 # adding the macOS recovery to a VM
-AddRecoveryToVM = input("\n\n\nDo you want to add this macOS recovery to a VM? Default=no")
+AddRecoveryToVM = input("\n\n\nDo you want to add this macOS recovery to a VM? Default=no " + "Options: Y or N \n")
 if AddRecoveryToVM in ['yes', 'Yes', 'Y', 'y']:
-    DebugPrint("Preparing to add macOS %s recovery to VM" % (macOSVersion))
-    VMID = input("Enter the VM ID of the vm you want the macOS recovery to")
-    VM_config = open("vm.conf")
-    VM_config.write("test")
+    DebugPrint("\nPreparing to add macOS %s recovery to VM" % (macOSVersion))
+    # Q35 can only use 2 ide slots and only the master devices, no slave devices (Only IDE 0 and 2, 1 and 3 are slaves)
+    # i440fx seems to be able to use Both master and slave devices (IDE 0,1,2,3) but macOS doesn't seem to boot on this platform.
+    # Proxmox ISO folder: /var/lib/vz/template/iso
+    # Proxmox VM config location: /etc/pve/qemu-server
+
+    vmid = input("\nEnter the vm id of the vm you want to add the macOS recovery to: ")
+    DebugPrint("\nChosen vm id: " + vmid)
+
+    vmconfig = "/etc/pve/qemu-server/" + vmid + ".conf"
+    DebugPrint("\nChosen vm config loaction" + vmconfig)
+
+    def WriteConfig(str):
+        with open(vmconfig, "a") as write_vmconfig:
+            #ide0: local:iso/BigSur-recovery.img,cache=unsafe,size=2097012K
+            write_vmconfig.write(str + ": local:iso/%s-recovery.img,cache=unsafe\n" % (macOSVersion))
+            DebugPrint("\nAdded " + str + " for macOS %s recovery to vm config" % (macOSVersion))
+
+    with open (vmconfig, 'r') as readconf:
+        vmconfigcontents =  ("".join(line.strip() for line in readconf))  
+        AllSataAndIdePorts = ["ide0", "ide2", "sata0", "sata1", "sata2", "sata3", "sata4", "sata5", "sata6"]
+
+        if all(x in vmconfigcontents for x in AllSataAndIdePorts):
+            print("\nAll SATA ports from 1-5 and IDE ports 0 and 2 are used, please remove a used IDE ro SATA port from the vm")
+            exit()
+
+        for port in AllSataAndIdePorts:
+            if port not in vmconfigcontents:
+                DebugPrint("\nNot in VM config: %s" % (port))
+                WriteConfig(port)
+                break
