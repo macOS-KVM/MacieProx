@@ -1,12 +1,14 @@
 # TODO:
 # - Add Size to vm config when adding macOS recovery to it
+# - Add a check if git is installed
+# - Only clone macrecovery instead of whole OpenCorePKG
 # - Support more, older macOS versions
 
-import os, shutil
+import os, shutil, subprocess
 from pathlib import Path
 
 ScriptPath = "/mnt/MacieProx"
-macrecoveryPath = "python3 " + ScriptPath + "/OpenCorePkg/Utilities/macrecovery/macrecovery.py"
+macrecoveryPath = "python3 " + ScriptPath + "//macrecovery/macrecovery.py"
 ProxISOPath = "/var/lib/vz/template/iso/"
 debug = False
 
@@ -15,6 +17,15 @@ def DebugPrint(str):
 	    print(str)
 
 os.system("clear")
+
+# check if svn (subversion) has been installed
+checksvn = subprocess.run(['which', 'svn'], stdout= subprocess.DEVNULL)
+if checksvn.returncode == 0:
+      DebugPrint("Found svn.")
+if checksvn.returncode == 1:
+      print("Couldn't find svn")
+      print("Please install subverion by running:  apt install subversion")
+      print("Once you installed subversion, run this script again")
 
 # debug mode
 setdebug = input('\nWould you like to enable debug mode? (default = no) '+ "Options: Y or N \n" )
@@ -30,12 +41,14 @@ if os.path.exists(ScriptPath):
 os.mkdir(ScriptPath) # Create script folder
 DebugPrint("\nCreated Script Folder.")
 os.chdir(ScriptPath) # cd into script path
-DebugPrint("\ncd into script path\n")
-os.system("git clone https://github.com/acidanthera/OpenCorePkg.git") # Clone OpenCore
-DebugPrint("\nCloned OpenCore\n")
+DebugPrint("\ncd into script path")
+
+# Clone macrecovery
+subprocess.run(['svn', 'checkout','https://github.com/acidanthera/OpenCorePkg/trunk/Utilities/macrecovery'], stdout=subprocess.DEVNULL)
+DebugPrint("\nCloned macrecovery")
 
 # select macOS version
-print("Which macOS version do you want?")
+print("\nWhich macOS version do you want?")
 SelectedNumber = input("1. Monterey\n2. Big Sur\n3. Calatina\n4. Mojave\n\nSelect version: ")
 if SelectedNumber in ['1']:
     DebugPrint("\nSelected Monterey\n")
@@ -58,7 +71,7 @@ DebugPrint("Converting macOS-%s.dmg to %s-recovery.img" % (macOSVersion, macOSVe
 os.system("qemu-img convert macOS-%s.dmg -O raw %s-recovery.img" % (macOSVersion, macOSVersion))
 DebugPrint("\nConverted macOS-%s.dmg to %s-recovery.img" % (macOSVersion, macOSVersion))
 
-# remove macOS-XX.dmg and macOS-XX.chunklist 
+# remove macOS-XX.dmg and macOS-XX.chunklist
 os.remove(ScriptPath + "/macOS-%s.dmg" % (macOSVersion))
 DebugPrint("\nRemoved macOS-%s.dmg" % (macOSVersion))
 os.remove(ScriptPath + "/macOS-%s.chunklist" % (macOSVersion))
@@ -98,7 +111,7 @@ if AddRecoveryToVM in ['yes', 'Yes', 'Y', 'y']:
             DebugPrint("\nAdded " + str + " for macOS %s recovery to vm config" % (macOSVersion))
 
     with open (vmconfig, 'r') as readconf:
-        vmconfigcontents =  ("".join(line.strip() for line in readconf))  
+        vmconfigcontents =  ("".join(line.strip() for line in readconf))
         AllSataAndIdePorts = ["ide0", "ide2", "sata0", "sata1", "sata2", "sata3", "sata4", "sata5", "sata6"]
 
         if all(x in vmconfigcontents for x in AllSataAndIdePorts):
