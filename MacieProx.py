@@ -1,6 +1,6 @@
 # TODO:
-# - Add Size to vm config when adding macOS recovery to it
 # - Support more, older macOS versions
+# - Make this a python GUI app which will remotely ssh to the proxmox host
 
 import os, shutil, subprocess
 from pathlib import Path
