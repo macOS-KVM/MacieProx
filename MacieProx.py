@@ -1,13 +1,11 @@
 # TODO:
 # - Add Size to vm config when adding macOS recovery to it
-# - Add a check if git is installed
-# - Only clone macrecovery instead of whole OpenCorePKG
 # - Support more, older macOS versions
 
 import os, shutil, subprocess
 from pathlib import Path
 
-ScriptPath = "/mnt/MacieProx"
+ScriptPath = "/mnt/MacieProx" # here macrecovery and the downloaded macos reovery will be temporarily stored
 macrecoveryPath = "python3 " + ScriptPath + "//macrecovery/macrecovery.py"
 ProxISOPath = "/var/lib/vz/template/iso/"
 debug = False
@@ -38,12 +36,16 @@ if os.path.exists(ScriptPath):
     shutil.rmtree(ScriptPath)
     DebugPrint("\nRemoved existing script folder.")
 
-os.mkdir(ScriptPath) # Create script folder
+# Create script storage 
+os.mkdir(ScriptPath) 
 DebugPrint("\nCreated Script Folder.")
-os.chdir(ScriptPath) # cd into script path
+
+# cd into script storage
+os.chdir(ScriptPath) 
 DebugPrint("\ncd into script path")
 
 # Clone macrecovery
+DebugPrint("\nCloning macrecovery...")
 subprocess.run(['svn', 'checkout','https://github.com/acidanthera/OpenCorePkg/trunk/Utilities/macrecovery'], stdout=subprocess.DEVNULL)
 DebugPrint("\nCloned macrecovery")
 
@@ -67,19 +69,13 @@ elif SelectedNumber in ['4']:
     os.system(macrecoveryPath + " -b Mac-7BA5B2DFE22DDD8C -m 00000000000KXPG00 download -n macOS-Mojave")
     macOSVersion = "Mojave"
 
-DebugPrint("Converting macOS-%s.dmg to %s-recovery.img" % (macOSVersion, macOSVersion))
+DebugPrint("\nConverting macOS-%s.dmg to %s-recovery.img" % (macOSVersion, macOSVersion))
 os.system("qemu-img convert macOS-%s.dmg -O raw %s-recovery.img" % (macOSVersion, macOSVersion))
 DebugPrint("\nConverted macOS-%s.dmg to %s-recovery.img" % (macOSVersion, macOSVersion))
 
-# remove macOS-XX.dmg and macOS-XX.chunklist
-os.remove(ScriptPath + "/macOS-%s.dmg" % (macOSVersion))
-DebugPrint("\nRemoved macOS-%s.dmg" % (macOSVersion))
-os.remove(ScriptPath + "/macOS-%s.chunklist" % (macOSVersion))
-DebugPrint("\nRemoved macOS-%s.chunklist" % (macOSVersion))
-
 # check if the macos recovery already exist in the proxmox iso directory
 MacRecoveryProxISOPath = ProxISOPath + "%s-recovery.img" % (macOSVersion)
-DebugPrint("Mac Recovery Prox ISO path " + MacRecoveryProxISOPath)
+DebugPrint("\nMac Recovery Prox ISO path " + MacRecoveryProxISOPath)
 if os.path.exists(MacRecoveryProxISOPath):
     DebugPrint("\nRemoving existing macOS %s recovery from Proxmox ISO folder" % (macOSVersion))
     os.remove(MacRecoveryProxISOPath)
@@ -88,6 +84,10 @@ if os.path.exists(MacRecoveryProxISOPath):
 DebugPrint("\nCommand to move: " + "mv " + macOSVersion + "-recovery.img " + ProxISOPath)
 os.system("mv " + macOSVersion + "-recovery.img " + ProxISOPath)
 DebugPrint("\nMoved macOS %s recovery to Proxmox ISO folder" % (macOSVersion))
+
+# removing script data folder
+shutil.rmtree(ScriptPath)
+DebugPrint("\nRemoved script data folder.")
 
 # adding the macOS recovery to a VM
 AddRecoveryToVM = input("\n\n\nDo you want to add this macOS recovery to a VM? Default=no " + "Options: Y or N \n")
@@ -104,11 +104,12 @@ if AddRecoveryToVM in ['yes', 'Yes', 'Y', 'y']:
     vmconfig = "/etc/pve/qemu-server/" + vmid + ".conf"
     DebugPrint("\nChosen vm config loaction" + vmconfig)
 
-    def WriteConfig(str):
+    def WriteConfig(port):
         with open(vmconfig, "a") as write_vmconfig:
             #ide0: local:iso/BigSur-recovery.img,cache=unsafe,size=2097012K
-            write_vmconfig.write(str + ": local:iso/%s-recovery.img,cache=unsafe\n" % (macOSVersion))
-            DebugPrint("\nAdded " + str + " for macOS %s recovery to vm config" % (macOSVersion))
+            Size = str((os.path.getsize('/var/lib/vz/template/iso/%s-recovery.img' % macOSVersion))/1024).strip(".0") + "K"
+            write_vmconfig.write(port + ": local:iso/%s-recovery.img,cache=unsafe,size=%s\n" % (macOSVersion, Size))
+            DebugPrint("\nAdded " + port + " for macOS %s recovery to vm config" % (macOSVersion))
 
     with open (vmconfig, 'r') as readconf:
         vmconfigcontents =  ("".join(line.strip() for line in readconf))
